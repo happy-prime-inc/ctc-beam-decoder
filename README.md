@@ -38,18 +38,9 @@ package — two mechanisms telling two resolvers to disregard an upstream
 constraint. That is fragile, and when it misbehaves it looks like a bad model
 rather than a bad install.
 
-The alternatives are worse rather than better: `flashlight-text` has no wheels
-past Python 3.12 and no stable release since 0.0.7; `ctcdecode` is source-only
-with no wheels at all; `k2` requires PyTorch. Everything else that is
-maintained lives inside a training framework.
-
-## Scope
-
-This reproduces pyctcdecode's behaviour. It is deliberately **not** a platform
-for new decoding features — the value on offer is that output does not change,
-and every addition erodes it. Bug reports and portability fixes are welcome;
-proposals for new search strategies, scoring schemes or output formats will be
-declined, kindly.
+Other implementations have their own constraints: `flashlight-text` has no
+wheels past Python 3.12 and no stable release since 0.0.7; `ctcdecode` is
+source-only with no wheels; `k2` requires PyTorch.
 
 ## Using it
 
@@ -68,11 +59,12 @@ cmake --build build/cmake
 ./scripts/check-install.sh build/cmake   # installs to a clean prefix and loads it
 ```
 
-`check-install.sh` is worth running before shipping anything built here. A
-CMake-built library keeps an rpath pointing at its own build directory, so it
-finds its neighbours however the install is configured, and `cmake --install`
-strips that rpath. An installed library that cannot find KenLM beside it
-passes every other test in this repository.
+`check-install.sh` checks something the build tree cannot. A CMake-built
+library keeps a search path pointing at its own build directory, so it finds
+KenLM wherever the install is configured to put it; `cmake --install` removes
+that path. An installed library that cannot find KenLM beside it therefore
+passes every other test here, and fails on the first machine that is not the
+one that built it.
 
 With a language model:
 
@@ -93,8 +85,8 @@ strings. Two correct beam searches with different pruning produce different
 output on the same logits, so parity means matching the pruning too
 (`token_min_logp`, `beam_prune_logp`, history pruning), not only the search.
 
-**n-best with word timings.** Consumers use beam agreement across hypotheses,
-and word-level frame indices, not only the top string.
+**n-best with word timings.** The full hypothesis list and per-word frame
+indices are part of the contract, not just the top string.
 
 **Hotword partial credit.** Boosting applies as a prefix is built, which is
 what lets a near-miss be rescued. A whole-word bonus paid at the end cannot do
@@ -134,13 +126,13 @@ the 9 differ in the top-1 transcript.** For those there is no single right
 answer to match: both outputs are pyctcdecode. The third column counts a
 fixture as matching if it agrees with either.
 
-A decoder that reproduced the first column exactly would have to reimplement
-CPython's set internals and stay pinned to them. That is a worse artifact than
-this one.
+Reproducing the first column exactly would mean reimplementing CPython's set
+internals and staying pinned to them.
 
-Scores are compared to 1e-4 rather than bit for bit, deliberately: they order
-beams and feed downstream stability comparisons, and nobody reads them. In
-practice they agree far more closely.
+Scores are compared to within 1e-4 rather than bit for bit. Floating-point
+accumulation order differs between numpy and C++, and matching it exactly is a
+much larger problem than matching the output. In practice they agree far more
+closely than that bound.
 
 The corpus itself is not published. Some of the audio it derives from carries a
 data-use agreement that has not been settled, so nothing derived from it is
@@ -195,15 +187,31 @@ python tools/mutation_audit.py --list
 python tools/mutation_audit.py
 ```
 
-## Two deliberate differences from the reference
+## Two differences from pyctcdecode
 
-- **Input normalisation happens in numpy, in the Python binding.** The library
-  has `ctcbd_prepare` for callers who are not using Python, but numpy's float32
-  `exp`, `log` and pairwise `sum` cannot be reproduced to the last bit, and
-  being one unit out in the last place drifts beam scores enough to change
-  which beams merge — measured, on a 1250-frame input.
-- **Degenerate input returns no beams instead of raising.** pyctcdecode throws
-  from `max()` on an empty sequence when a frame prunes everything away.
+**Log-probabilities are normalised in Python, not C++.**
+
+Before searching, the input is log-softmaxed and clipped. pyctcdecode does this
+with numpy, and so does this library — in the Python binding, before the data
+reaches C++.
+
+Doing it in C++ would be the obvious choice and gives slightly different
+answers. numpy's `exp`, `log` and `sum` are its own routines, and a C++
+reimplementation lands a fraction out in the final decimal place. That sounds
+harmless and is not: those values are added up across every frame, and by the
+end the difference is large enough to change which hypotheses the search treats
+as identical, which changes the transcript. Measured on a 1250-frame input.
+
+C callers get `ctcbd_prepare()`, which does the same normalisation in C++. It
+is close but not identical, so a C caller and a Python caller can differ in the
+last digit.
+
+**Silence returns an empty list rather than raising.**
+
+If the input has nothing decodable in it, every candidate can be discarded and
+the search ends with no hypotheses at all. pyctcdecode raises an exception in
+that case. This returns an empty list, so callers can check for it rather than
+guarding with a `try`.
 
 ## Tests
 
