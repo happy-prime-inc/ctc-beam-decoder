@@ -184,9 +184,10 @@ def main() -> None:
             },
             indent=2,
         )
-        + "\n"
+        + "\n",
+        encoding="utf-8",
     )
-    (HERE / "references.json").write_text(json.dumps(references, indent=2) + "\n")
+    (HERE / "references.json").write_text(json.dumps(references, indent=2) + "\n", encoding="utf-8")
     print(f"\n{len(manifest)} passages, {sum(p['duration_s'] for p in manifest):.0f}s total")
 
 

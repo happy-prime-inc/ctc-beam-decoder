@@ -136,7 +136,7 @@ def main() -> None:
         manifest.extend(build_split(split, want))
 
     references = {m["name"]: m["reference"] for m in manifest}
-    (HERE / "references.json").write_text(json.dumps(references, indent=1, sort_keys=True))
+    (HERE / "references.json").write_text(json.dumps(references, indent=1, sort_keys=True), encoding="utf-8")
     (HERE / "manifest.json").write_text(json.dumps({
         "source": "openslr/librispeech_asr",
         "licence": "CC BY 4.0",
@@ -144,7 +144,7 @@ def main() -> None:
         "target_s": TARGET_S,
         "gap_s": GAP_S,
         "passages": [{k: v for k, v in m.items() if k != "reference"} for m in manifest],
-    }, indent=1))
+    }, indent=1), encoding="utf-8")
 
     total = sum(m["duration_s"] for m in manifest)
     print(f"\n{len(manifest)} passages, {total / 60:.1f} minutes")
