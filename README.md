@@ -143,9 +143,59 @@ accumulation order differs between numpy and C++, and matching it exactly is a
 much larger problem than matching the output. In practice they agree far more
 closely than that bound.
 
-The corpus itself is not published. Some of the audio it derives from carries a
-data-use agreement that has not been settled, so nothing derived from it is
-released either. **The test suite needs none of it.**
+The corpus is not distributed here — it is 44 MB of intermediate arrays and a
+few hundred megabytes of audio — but the method is, and most of the material
+is public. 63 of the 72 fixtures are built from LibriSpeech and the AMI Meeting
+Corpus, both CC BY 4.0, by scripts that stream them from Hugging Face. The
+other 9 are a set whose licence has not been checked and two private
+recordings, so those are not redistributable.
+
+Everything needed to rebuild the CC BY 4.0 part and repeat the comparison is
+in `tools/`:
+
+```
+python tools/fixtures/build_librispeech.py   # 40 passages, 40 speakers
+python tools/fixtures/build_ami.py           # 23 passages of meeting speech
+# run your acoustic model over them, saving log-probabilities (see below)
+python tools/make_oracle.py --logits build/logits --out reference
+python tools/check_parity.py --logits build/logits --reference reference
+```
+
+`make_oracle.py` takes a directory of arrays and does not care where they came
+from:
+
+```
+build/logits/index.json        {"vocab": [...], "blank_id": N, "items": [...]}
+build/logits/logits/<key>.npy  float32 [frames, len(vocab)]
+```
+
+So the comparison is not tied to this corpus — point it at any audio and any
+CTC model you have.
+
+### Where the disagreements are
+
+If you want to go straight to the interesting cases rather than decode 82
+minutes, these are the fixtures where pyctcdecode disagrees with itself
+depending on token order. `check_order_sensitivity.py` finds them; these are
+the ones it found here:
+
+| fixture | source | top-1 changes |
+|---|---|---|
+| `EN2002c_MEE073` | AMI, meeting EN2002c, speaker MEE073 | yes |
+| `EN2002d_FEO072` | AMI, meeting EN2002d, speaker FEO072 | yes |
+| `EN2002d_MEE071` | AMI, meeting EN2002d, speaker MEE071 | yes |
+| `ES2004a_FEE016` | AMI, meeting ES2004a, speaker FEE016 | yes |
+| `test_clean_260` | LibriSpeech test-clean, speaker 260 | yes |
+| `test_clean_7176` | LibriSpeech test-clean, speaker 7176 | yes |
+| `test_other_4852` | LibriSpeech test-other, speaker 4852 | yes |
+| `test_other_6432` | LibriSpeech test-other, speaker 6432 | yes |
+
+A ninth fixture, one of the private recordings, differs too but only below the
+top hypothesis, so it is not listed above.
+
+`show_order_divergence.py` prints how far apart any of them are.
+
+**The test suite needs none of this.**
 
 ### Does the language model actually do anything?
 
