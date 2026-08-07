@@ -97,7 +97,7 @@ def write_reference(path, reference):
         f"  {json.dumps(k)}: {json.dumps(v, separators=(',', ':'))}"
         for k, v in fixtures.items()
     )
-    path.write_text(f'{head},\n "fixtures": {{\n{body}\n }}\n}}\n')
+    path.write_text(f'{head},\n "fixtures": {{\n{body}\n }}\n}}\n', encoding="utf-8")
 
 
 def record(dec, logits, hotwords, top_n=TOP_BEAMS_RECORDED):
@@ -147,10 +147,10 @@ def main() -> None:
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
 
-    meta = json.loads((src / "index.json").read_text())
+    meta = json.loads((src / "index.json").read_text(encoding="utf-8"))
     unigrams = None
     if args.unigrams:
-        unigrams = [w.strip() for w in Path(args.unigrams).read_text().split() if w.strip()]
+        unigrams = [w.strip() for w in Path(args.unigrams).read_text(encoding="utf-8").split() if w.strip()]
     if args.kenlm:
         dec = build_ctcdecoder(meta["vocab"], kenlm_model_path=args.kenlm,
                                unigrams=unigrams, alpha=args.alpha, beta=args.beta)

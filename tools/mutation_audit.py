@@ -176,7 +176,7 @@ def main() -> None:
             print(f"  {name:<28} skipped   needs a {needs} build")
             continue
         path = ROOT / rel
-        original = path.read_text()
+        original = path.read_text(encoding="utf-8")
         if find not in original:
             # A stale anchor mutates nothing and proves nothing. Reported as a
             # failure because the alternative is an audit that goes quietly
@@ -184,7 +184,7 @@ def main() -> None:
             not_exercised.append((name, f"anchor no longer in {rel}"))
             print(f"  {name:<28} NOT RUN   anchor no longer in {rel}")
             continue
-        path.write_text(original.replace(find, replace, 1))
+        path.write_text(original.replace(find, replace, 1), encoding="utf-8")
         try:
             build = run("cmake --build build/cmake -j8")
             if build.returncode != 0:
@@ -196,7 +196,7 @@ def main() -> None:
             (caught if failed else survived).append((name, what))
             print(f"  {name:<28} {'caught' if failed else 'SURVIVED':<9} {what}")
         finally:
-            path.write_text(original)
+            path.write_text(original, encoding="utf-8")
     run("cmake --build build/cmake -j8")
 
     print(f"\n{len(caught)} caught, {len(survived)} survived, "

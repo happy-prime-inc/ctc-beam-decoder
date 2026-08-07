@@ -102,7 +102,7 @@ def main() -> None:
         sys.exit("this build has no KenLM support")
 
     src = Path(args.logits).resolve()
-    meta = json.loads((src / "index.json").read_text())
+    meta = json.loads((src / "index.json").read_text(encoding="utf-8"))
 
     print("1. word scores against KenLM directly")
     check_scores(args.kenlm, args.alpha, args.beta)

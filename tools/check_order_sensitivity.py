@@ -36,7 +36,7 @@ def main() -> None:
     args = ap.parse_args()
 
     src = Path(args.logits).resolve()
-    meta = json.loads((src / "index.json").read_text())
+    meta = json.loads((src / "index.json").read_text(encoding="utf-8"))
     dec = build_ctcdecoder(meta["vocab"])
     orders = {"native": set, "ascending": ascending(), "descending": descending()}
 
