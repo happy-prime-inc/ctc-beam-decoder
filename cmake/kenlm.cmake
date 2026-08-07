@@ -69,11 +69,6 @@ target_link_libraries(kenlm PRIVATE ${CTCBD_ZLIB_TARGET})
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_link_libraries(kenlm PRIVATE rt)
-
-  # Same reason as ctc_beam_decoder in the top-level CMakeLists: carry our own
-  # C++ runtime rather than depending on the build machine's libstdc++. Both
-  # libraries need it — libkenlm.so is loaded by rpath alongside the decoder, so
-  # a portable decoder next to a non-portable kenlm fails at exactly the same
-  # point, just one library later.
-  target_link_options(kenlm PRIVATE -static-libstdc++ -static-libgcc)
+  # No -static-libstdc++ here either; see the note in the top-level
+  # CMakeLists.txt for why it was tried and reverted.
 endif()
