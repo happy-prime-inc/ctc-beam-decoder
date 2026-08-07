@@ -44,27 +44,61 @@ source-only with no wheels; `k2` requires PyTorch.
 
 ## Using it
 
-Prebuilt bundles for macOS (arm64), Linux (x64) and Windows (x64) are attached
-to each release. Each contains the shared library, the KenLM library it loads,
-the Python binding and the C header. Put that directory on `PYTHONPATH` and
-import it — the binding finds its libraries beside itself.
+There is no pip package. `ctc_beam_decoder` is a pure-Python module that loads
+a shared library through `ctypes`, so using it means putting one directory on
+`PYTHONPATH` — the module and the library it loads travel together, and it
+finds the library itself.
 
-To build from source you need CMake 3.16+, a C++17 compiler, and Python with
-numpy:
+### From a release
+
+Bundles for macOS (arm64), Linux (x64) and Windows (x64) are attached to each
+release. Unpack one and point at it:
+
+```
+tar xzf ctc-beam-decoder-v0.1.0-macos-arm64.tar.gz
+export PYTHONPATH=$PWD/ctc-beam-decoder-v0.1.0-macos-arm64
+python -c "import ctc_beam_decoder; print(ctc_beam_decoder.has_kenlm())"
+```
+
+The directory holds the Python module, the decoder library, the KenLM library
+it loads, the C header and the licences. Nothing else is needed and nothing is
+installed.
+
+### From source
+
+Needs CMake 3.16+, a C++17 compiler, and Python with numpy:
 
 ```
 ./scripts/fetch-kenlm.sh          # skip with -DCTCBD_WITH_KENLM=OFF
 cmake -S . -B build/cmake -DCMAKE_BUILD_TYPE=Release
 cmake --build build/cmake
-./scripts/check-install.sh build/cmake   # installs to a clean prefix and loads it
 ```
 
-`check-install.sh` checks something the build tree cannot. A CMake-built
-library keeps a search path pointing at its own build directory, so it finds
-KenLM wherever the install is configured to put it; `cmake --install` removes
-that path. An installed library that cannot find KenLM beside it therefore
-passes every other test here, and fails on the first machine that is not the
-one that built it.
+That leaves the libraries in `build/cmake/` and the module in `python/`. From
+the repository root:
+
+```
+PYTHONPATH=python python -c "import ctc_beam_decoder; print(ctc_beam_decoder.has_kenlm())"
+```
+
+The module looks for its library next to itself, then one directory up, then in
+`build/cmake` — which is why a source tree works without copying anything
+about. To use it from elsewhere, either copy the two libraries next to
+`python/ctc_beam_decoder/`, or set `CTC_BEAM_DECODER_LIB` to the library's full
+path.
+
+### Before shipping a build
+
+```
+./scripts/check-install.sh build/cmake
+```
+
+It installs to a clean prefix and loads the result from there, which is a check
+the build tree cannot perform. A CMake-built library keeps a search path
+pointing at its own build directory, so it finds KenLM wherever the install
+puts it; `cmake --install` removes that path. An installed library that cannot
+find KenLM beside it therefore passes every other test here, and fails on the
+first machine that is not the one that built it.
 
 With a language model:
 
