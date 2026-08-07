@@ -30,7 +30,11 @@ It reads a directory produced by whatever runs your acoustic model:
     build/logits/index.json          {"vocab": [...], "blank_id": N,
                                       "items": [{"key": ..., "set": ...,
                                                  "reference": "..."}, ...]}
-    build/logits/logits/<key>.npy    float32 [frames, len(vocab)]
+    build/logits/logits/<key>.npy    float32 [frames, columns]
+
+`columns` is not always `len(vocab)`: a vocabulary with no blank in it gets one
+appended, and the array needs a column for it. See the README for which labels
+count as a blank.
 
 Nothing here cares where the log-probabilities came from — one array per
 utterance and the vocabulary they were produced with is the whole input.

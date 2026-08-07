@@ -167,8 +167,10 @@ Three things to get right, because getting them wrong fails in confusing ways:
 
 - **`columns` is not always `len(vocab)`.** pyctcdecode appends a CTC blank to
   a vocabulary that has none, so the array needs a column for it. If your
-  labels already include the blank — as `""`, `<pad>` or `[PAD]` — then
-  `columns == len(vocab)`. If they do not, it is `len(vocab) + 1`, blank last.
+  labels already include the blank, `columns == len(vocab)`. Recognised as a
+  blank: the empty string, a `<pad>`/`[PAD]`-style token, and — for
+  vocabularies that are not sub-word — `_`. Otherwise it is `len(vocab) + 1`,
+  blank last.
   The corpus above is the second case: 1024 labels, 1025 columns.
 - **`blank_id` is the blank's index in that column space**, so 1024 in the
   example.
@@ -206,8 +208,8 @@ code paths are exercised — but "72/72 on a different model" is not a claim
 anyone has earned yet.
 
 **So the exact table is not reproducible from this repository alone.** The
-audio is: `tools/fixtures/build_librispeech.py` and `build_ami.py` rebuild the
-63 CC BY 4.0 fixtures. The model is public. But the code that runs it and
+audio is: `tools/fixtures/build_librispeech.py` and `tools/fixtures/build_ami.py`
+rebuild the 63 CC BY 4.0 fixtures. The model is public. But the code that runs it and
 writes out log-probabilities belongs to the application this was extracted
 from, and is not here — you would be writing that part.
 
