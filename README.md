@@ -153,17 +153,33 @@ recordings, so those are not redistributable.
 **What you can reproduce, and what you cannot.** Be clear about this before
 starting.
 
-The comparison itself is fully here, and it works on any CTC model. Supply a
-directory of log-probabilities in this shape:
+The comparison itself is fully here, and it works on any CTC model. Run your
+model over your audio, save the output, and describe it:
 
 ```
 build/logits/index.json        {"vocab": [...], "blank_id": N,
                                 "items": [{"key": ..., "set": ...,
                                            "reference": "transcript"}, ...]}
-build/logits/logits/<key>.npy  float32 [frames, len(vocab)]
+build/logits/logits/<key>.npy  float32 [frames, columns]
 ```
 
-and then:
+Three things to get right, because getting them wrong fails in confusing ways:
+
+- **`columns` is not always `len(vocab)`.** pyctcdecode appends a CTC blank to
+  a vocabulary that has none, so the array needs a column for it. If your
+  labels already include the blank — as `""`, `<pad>` or `[PAD]` — then
+  `columns == len(vocab)`. If they do not, it is `len(vocab) + 1`, blank last.
+  The corpus above is the second case: 1024 labels, 1025 columns.
+- **`blank_id` is the blank's index in that column space**, so 1024 in the
+  example.
+- **`reference` is the ground-truth transcript**, used to pick per-fixture
+  hotwords. Leave it empty and the hotword half of the comparison has nothing
+  to boost.
+
+Raw model outputs are fine — both this library and pyctcdecode log-softmax
+their input, so there is no need to normalise first.
+
+Then:
 
 ```
 python tools/make_oracle.py  --logits build/logits --out reference
@@ -175,17 +191,30 @@ decoder against that recording. Neither knows or cares what produced the
 arrays. If you already use pyctcdecode you already have logits in this shape,
 give or take an `index.json`.
 
-**Reproducing the exact table above additionally needs the acoustic model that
-made those arrays, and that step is not scripted here.** The audio is:
-`tools/fixtures/build_librispeech.py` and `build_ami.py` rebuild the 63 CC BY
-4.0 fixtures from Hugging Face. The model is public too — a Parakeet CTC 1.1b
-GGUF from [`mudler/parakeet-cpp-gguf`](https://huggingface.co/mudler/parakeet-cpp-gguf)
-run through [parakeet.cpp](https://github.com/mudler/parakeet.cpp) — but the
-code that drives it lives in the application this was written for, not here,
-so you would be writing that part yourself.
+### Which model the numbers came from
 
-In short: the *method* is reproducible on your own model in a few commands, the
-*numbers* are reproducible only with more work than most readers will want.
+One, and it is worth being specific rather than leaving "a CTC model" to do the
+work: **Parakeet CTC 1.1b**, the `q4_k` GGUF from
+[`mudler/parakeet-cpp-gguf`](https://huggingface.co/mudler/parakeet-cpp-gguf),
+run through [parakeet.cpp](https://github.com/mudler/parakeet.cpp) v0.5.0. A
+1024-token sub-word vocabulary with the blank appended, so every figure above
+describes that vocabulary and that model's probability distributions.
+
+Nothing has been measured on another acoustic model at this scale. The tests
+cover both vocabulary styles pyctcdecode supports, on random inputs, so the
+code paths are exercised — but "72/72 on a different model" is not a claim
+anyone has earned yet.
+
+**So the exact table is not reproducible from this repository alone.** The
+audio is: `tools/fixtures/build_librispeech.py` and `build_ami.py` rebuild the
+63 CC BY 4.0 fixtures. The model is public. But the code that runs it and
+writes out log-probabilities belongs to the application this was extracted
+from, and is not here — you would be writing that part.
+
+What *is* reproducible here, in two commands, is the same comparison against
+your own model. That is the more useful thing anyway: it tells you whether this
+decoder matches pyctcdecode on the distributions you actually decode, rather
+than on someone else's.
 
 ### Where the disagreements are
 
