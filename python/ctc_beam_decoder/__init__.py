@@ -99,7 +99,11 @@ def _find_library(explicit: str | os.PathLike[str] | None) -> Path:
     candidates = [Path(env)] if env else []
     here = Path(__file__).resolve().parent
     build = here.parent.parent / "build" / "cmake"
-    candidates += [here / name, build / name]
+    # here/           - installed as a package with the library inside it
+    # here.parent/    - the shipped bundle, where the libraries sit beside the
+    #                   package rather than within it, so that one archive
+    #                   carries the binding and what it binds
+    candidates += [here / name, here.parent / name, build / name]
     # Multi-config generators nest by configuration. CMakeLists pins the
     # output directory so this should not trigger, but a build configured by
     # someone else's tooling is not ours to assume about.
