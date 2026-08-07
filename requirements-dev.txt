@@ -1,0 +1,6 @@
+# Test-time only. Nothing here ships.
+#
+# Pinned so the CI pip cache has a stable key to hash; without a file to key
+# on, every run reinstalls from scratch.
+pytest==8.3.4
+numpy==2.2.1

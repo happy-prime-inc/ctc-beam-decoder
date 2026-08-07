@@ -1,0 +1,194 @@
+# Build the shipping binaries and attach them to a release.
+#
+# The consumer is classroom-captions, which pins every native asset by
+# checksum and downloads it with an unauthenticated curl — libparakeet, the
+# VAD models, the language model. These bundles deliberately follow the same
+# shape as libparakeet's so that download-assets.sh treats them the same way:
+# one archive per platform, containing a directory named after the archive,
+# containing the libraries.
+#
+# Two libraries per bundle, not one. The decoder finds KenLM beside itself by
+# a relative path — @loader_path on macOS, $ORIGIN on Linux, same-directory on
+# Windows — so shipping them together is what makes that resolution work.
+# Splitting them would mean the consumer had to know about the dependency.
+#
+# check-install.sh gates every platform. It installs to a clean prefix and
+# loads the result with no library search path set, which is the only check
+# that can see the two packaging faults this project has already had: a
+# wrongly named DLL, and one written into a per-configuration subdirectory.
+# A build tree cannot fail either of them.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+
+  # For rehearsing the build without cutting a release. Produces the same
+  # artifacts and checksums, attaches nothing.
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.bundle }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS is arm64 only, matching libparakeet, which ships no Intel
+          # bundle either. Linux arm64 is deliberately absent: nothing in this
+          # project has ever run on it, and shipping a binary nobody has
+          # tested is worse than not shipping one.
+          - os: macos-14
+            bundle: macos-arm64
+            ext: tar.gz
+            libs: libctc_beam_decoder.dylib libkenlm.dylib
+          - os: ubuntu-latest
+            bundle: linux-x64
+            ext: tar.gz
+            libs: libctc_beam_decoder.so libkenlm.so
+          - os: windows-latest
+            bundle: win-x64
+            ext: zip
+            libs: ctc_beam_decoder.dll kenlm.dll
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Fetch KenLM sources
+        shell: bash
+        run: ./scripts/fetch-kenlm.sh
+
+      - name: Build
+        shell: bash
+        run: |
+          cmake -S . -B build/cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/cmake --config Release -j 2
+
+      - name: Check the installed artifact loads
+        shell: bash
+        run: ./scripts/check-install.sh build/cmake
+
+      - name: Stage the bundle
+        shell: bash
+        # From the install, never from the build tree.
+        #
+        # They are not the same binary. CMake gives a build-tree library an
+        # rpath pointing at the absolute path of the build directory, and
+        # replaces it with @loader_path/$ORIGIN only on install. Shipping the
+        # build-tree copy produces something that works on the machine that
+        # built it and cannot find KenLM anywhere else — which is the same
+        # fault that already got through once, reintroduced at the packaging
+        # step. Rehearsing this workflow by hand is how it was caught.
+        #
+        # Named after the archive, as libparakeet's bundles are, so the
+        # consumer's extraction logic is the same for both.
+        run: |
+          cmake --install build/cmake --prefix dist/staging --config Release
+          STEM="ctc-beam-decoder-${GITHUB_REF_NAME}-${{ matrix.bundle }}"
+          echo "STEM=$STEM" >> "$GITHUB_ENV"
+          mkdir -p "dist/$STEM"
+          for lib in ${{ matrix.libs }}; do
+            found="$(find dist/staging -name "$lib" -print -quit)"
+            if [ -z "$found" ]; then
+              echo "::error::$lib is not in the install tree; nothing to ship"
+              find dist/staging -type f | head -40
+              exit 1
+            fi
+            cp "$found" "dist/$STEM/"
+          done
+          cp include/ctc_beam_decoder.h LICENSE NOTICE "dist/$STEM/"
+          # The Python binding travels with the library it binds.
+          #
+          # It declares the ABI version it expects and refuses to load a
+          # library that reports a different one — which only helps if the two
+          # cannot drift apart in the first place. Shipping them in one
+          # archive makes skew impossible rather than merely detectable, and
+          # means the consumer pins one checksum instead of coordinating two.
+          cp -R python/ctc_beam_decoder "dist/$STEM/"
+          find "dist/$STEM" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+          ls -lR "dist/$STEM"
+
+      - name: Refuse to ship a path from this runner
+        shell: bash
+        # A library carrying the build directory's absolute path resolves its
+        # neighbour only here. Cheap to check, and the failure it prevents
+        # appears as "works for me" on every subsequent report.
+        run: |
+          lib="dist/$STEM/$(echo '${{ matrix.libs }}' | cut -d' ' -f1)"
+          case "$(uname -s)" in
+            Darwin)
+              otool -l "$lib" | grep -A2 LC_RPATH | grep 'path ' || true
+              if otool -l "$lib" | grep -q "path ${GITHUB_WORKSPACE}"; then
+                echo "::error::$lib carries this runner's build path"
+                exit 1
+              fi ;;
+            Linux)
+              readelf -d "$lib" | grep -E 'RPATH|RUNPATH' || true
+              if readelf -d "$lib" | grep -E 'RPATH|RUNPATH' | grep -q "${GITHUB_WORKSPACE}"; then
+                echo "::error::$lib carries this runner's build path"
+                exit 1
+              fi ;;
+            *) echo "    no embedded search paths on this platform" ;;
+          esac
+
+      - name: Archive
+        shell: bash
+        run: |
+          cd dist
+          if [ "${{ matrix.ext }}" = "zip" ]; then
+            7z a -tzip "$STEM.zip" "$STEM" > /dev/null
+          else
+            tar -czf "$STEM.tar.gz" "$STEM"
+          fi
+          # The checksum the consumer pins. Printed as well as written, so it
+          # is readable from the log without downloading anything.
+          if command -v sha256sum > /dev/null; then
+            sha256sum "$STEM.${{ matrix.ext }}" | tee "$STEM.${{ matrix.ext }}.sha256"
+          else
+            shasum -a 256 "$STEM.${{ matrix.ext }}" | tee "$STEM.${{ matrix.ext }}.sha256"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.bundle }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums for download-assets.sh
+        # Collected in one place so they can be pasted into the consumer's
+        # pinning block without opening three logs.
+        run: |
+          echo "Paste these into classroom-captions/scripts/download-assets.sh:"
+          echo
+          cat dist/*.sha256
+
+      - name: Attach to the release
+        # Only for a tag. A workflow_dispatch run builds and checksums so the
+        # thing can be rehearsed, and publishes nothing.
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "Prebuilt decoder and KenLM libraries. Each bundle carries both: the decoder resolves KenLM beside itself." \
+            dist/*.tar.gz dist/*.zip dist/*.sha256

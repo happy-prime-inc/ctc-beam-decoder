@@ -1,0 +1,37 @@
+ctc-beam-decoder
+Copyright 2026 Happy Prime Inc.
+
+This product includes software derived from pyctcdecode
+(https://github.com/kensho-technologies/pyctcdecode),
+Copyright 2021-present Kensho Technologies, LLC,
+licensed under the Apache License, Version 2.0.
+
+The prefix beam search, hotword biasing and language-model fusion here are a
+C++ implementation of the behaviour of that library. Where its source was used
+as reference or adapted, the derived files say so in their headers.
+
+CTC prefix beam search itself is published work and is not claimed by either
+project.
+
+--------------------------------------------------------------------------
+
+When built with -DCTCBD_WITH_KENLM=ON (the default), this product links
+against KenLM (https://github.com/kpu/kenlm), Copyright Kenneth Heafield and
+contributors, most of which is licensed under the GNU Lesser General Public
+License version 2.1, with per-file exceptions stated in that project's own
+LICENSE, COPYING, COPYING.3 and COPYING.LESSER.3.
+
+KenLM is built as its own shared library and linked dynamically, so it remains
+a separate, replaceable component. Anyone distributing a binary that includes
+it is responsible for the LGPL's terms: making the KenLM source available,
+keeping it replaceable, and carrying this notice. `scripts/fetch-kenlm.sh`
+records the exact commit the sources came from.
+
+A KenLM build also statically links zlib (https://github.com/madler/zlib),
+Copyright Jean-loup Gailly and Mark Adler, under the zlib licence — permissive,
+attribution-only, no source-availability requirement. It is there so KenLM can
+read a gzipped ARPA model.
+
+Building with -DCTCBD_WITH_KENLM=OFF produces a library with no KenLM and no
+zlib in it, and no LGPL obligations. Beam search, hotword biasing and the allowlist all
+work in that build; only language-model fusion is unavailable.

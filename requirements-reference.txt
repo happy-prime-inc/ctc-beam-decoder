@@ -1,0 +1,11 @@
+# The implementation this library is measured against, needed only by the
+# tests that compare with it. Kept apart from requirements-dev.txt on purpose.
+#
+# pyctcdecode requires numpy<2, so listing it beside a pinned modern numpy is
+# a contradiction pip refuses outright — it does not quietly downgrade a hard
+# pin. Installing it as a second step does downgrade numpy, which is fine
+# where that is cheap and is why this is installed on Linux only: numpy 1.26
+# has no Windows wheel for Python 3.13, so pip builds it from source and
+# produces one that crashes on import. That is the defect this library exists
+# to escape.
+pyctcdecode==0.5.0

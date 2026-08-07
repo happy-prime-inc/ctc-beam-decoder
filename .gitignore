@@ -1,0 +1,9 @@
+# Regenerable inputs to the oracle: hundreds of MB of .npy logits, produced
+# from fixtures and a model that live outside this repository. The reference
+# JSON they produce is committed; these are not.
+build/
+__pycache__/
+*.pyc
+# Fetched at a pinned commit by scripts/fetch-kenlm.sh, not vendored.
+third_party/
+dist/
