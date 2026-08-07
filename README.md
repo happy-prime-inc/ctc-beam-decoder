@@ -150,27 +150,42 @@ Corpus, both CC BY 4.0, by scripts that stream them from Hugging Face. The
 other 9 are a set whose licence has not been checked and two private
 recordings, so those are not redistributable.
 
-Everything needed to rebuild the CC BY 4.0 part and repeat the comparison is
-in `tools/`:
+**What you can reproduce, and what you cannot.** Be clear about this before
+starting.
+
+The comparison itself is fully here, and it works on any CTC model. Supply a
+directory of log-probabilities in this shape:
 
 ```
-python tools/fixtures/build_librispeech.py   # 40 passages, 40 speakers
-python tools/fixtures/build_ami.py           # 23 passages of meeting speech
-# run your acoustic model over them, saving log-probabilities (see below)
-python tools/make_oracle.py --logits build/logits --out reference
-python tools/check_parity.py --logits build/logits --reference reference
-```
-
-`make_oracle.py` takes a directory of arrays and does not care where they came
-from:
-
-```
-build/logits/index.json        {"vocab": [...], "blank_id": N, "items": [...]}
+build/logits/index.json        {"vocab": [...], "blank_id": N,
+                                "items": [{"key": ..., "set": ...,
+                                           "reference": "transcript"}, ...]}
 build/logits/logits/<key>.npy  float32 [frames, len(vocab)]
 ```
 
-So the comparison is not tied to this corpus — point it at any audio and any
-CTC model you have.
+and then:
+
+```
+python tools/make_oracle.py  --logits build/logits --out reference
+python tools/check_parity.py --logits build/logits --reference reference
+```
+
+`make_oracle.py` records what pyctcdecode does; `check_parity.py` compares this
+decoder against that recording. Neither knows or cares what produced the
+arrays. If you already use pyctcdecode you already have logits in this shape,
+give or take an `index.json`.
+
+**Reproducing the exact table above additionally needs the acoustic model that
+made those arrays, and that step is not scripted here.** The audio is:
+`tools/fixtures/build_librispeech.py` and `build_ami.py` rebuild the 63 CC BY
+4.0 fixtures from Hugging Face. The model is public too — a Parakeet CTC 1.1b
+GGUF from [`mudler/parakeet-cpp-gguf`](https://huggingface.co/mudler/parakeet-cpp-gguf)
+run through [parakeet.cpp](https://github.com/mudler/parakeet.cpp) — but the
+code that drives it lives in the application this was written for, not here,
+so you would be writing that part yourself.
+
+In short: the *method* is reproducible on your own model in a few commands, the
+*numbers* are reproducible only with more work than most readers will want.
 
 ### Where the disagreements are
 
