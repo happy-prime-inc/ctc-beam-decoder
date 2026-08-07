@@ -44,12 +44,39 @@ source-only with no wheels; `k2` requires PyTorch.
 
 ## Using it
 
-There is no pip package. `ctc_beam_decoder` is a pure-Python module that loads
-a shared library through `ctypes`, so using it means putting one directory on
-`PYTHONPATH` — the module and the library it loads travel together, and it
-finds the library itself.
+### pip
+
+```bash
+pip install ctc-beam-decoder
+```
+
+Wheels are published for macOS (arm64), Linux (x64) and Windows (x64). There is
+no source distribution, deliberately: an sdist would build from source, and a
+from-source dependency chain breaking a platform is the reason this project
+exists. `pip install` either finds a wheel for your platform or fails clearly.
+
+The wheel carries the shared libraries inside the package, so nothing else needs
+installing and no paths need setting.
+
+**Python 3.9 and up.** The binding is pure `ctypes` with no C extension, so one
+wheel serves every version — and the release workflow installs and imports that
+wheel on 3.9, 3.11, 3.13 and 3.14 rather than assuming it. A version bound
+asserted instead of measured is what made this project necessary; it would be a
+poor joke to repeat it here.
+
+**Linux compatibility.** The Linux wheel is built on Ubuntu 22.04 and links the
+C++ runtime statically, so it runs on glibc 2.35 and later — 22.04, Debian 12,
+RHEL 9 and newer. v0.1.0 was built on a newer toolchain and would not load on
+any of those.
 
 ### From a release
+
+The bundles are still published for consumers that pin binaries by checksum
+rather than installing from an index, which is what `classroom-captions` does.
+`ctc_beam_decoder` is a pure-Python module that loads a shared library through
+`ctypes`, so using a bundle means putting one directory on `PYTHONPATH` — the
+module and the library it loads travel together, and it finds the library
+itself.
 
 Bundles for macOS (arm64), Linux (x64) and Windows (x64) are attached to each
 release. Unpack one and point at it:

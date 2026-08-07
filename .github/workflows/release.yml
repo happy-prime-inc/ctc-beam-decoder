@@ -43,6 +43,7 @@ jobs:
             bundle: macos-arm64
             ext: tar.gz
             libs: libctc_beam_decoder.dylib libkenlm.dylib
+            wheel_tag: macosx_14_0_arm64
           # ubuntu-22.04 rather than ubuntu-latest, deliberately.
           #
           # v0.1.0 was built on ubuntu-latest — 24.04 — and would not load on
@@ -61,10 +62,15 @@ jobs:
             bundle: linux-x64
             ext: tar.gz
             libs: libctc_beam_decoder.so libkenlm.so
+            # manylinux_2_35 is Ubuntu 22.04's glibc. Claiming an older tag
+            # would be the same lie in metadata that the GLIBCXX failure was in
+            # the binary — pip would install it somewhere it cannot run.
+            wheel_tag: manylinux_2_35_x86_64
           - os: windows-latest
             bundle: win-x64
             ext: zip
             libs: ctc_beam_decoder.dll kenlm.dll
+            wheel_tag: win_amd64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -150,6 +156,78 @@ jobs:
             *) echo "    no embedded search paths on this platform" ;;
           esac
 
+      # Build the wheel from the same staged libraries the archive ships.
+      #
+      # Deliberately not from the build tree: the staged copies are the ones
+      # with @loader_path/$ORIGIN rpaths rather than this runner's absolute
+      # build path, and they have just been checked for that two steps above.
+      # A wheel built from build/cmake would be the "works on the machine that
+      # built it" fault again, wearing a different hat.
+      #
+      # The libraries go *inside* the package directory. The binding's search
+      # order already looks there first — `here / name`, commented as the
+      # installed-package case — so nothing in the Python changes.
+      - name: Build the wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          for lib in ${{ matrix.libs }}; do
+            cp "dist/$STEM/$lib" python/ctc_beam_decoder/
+          done
+          python -m pip install --quiet build wheel
+          python -m build --wheel --outdir dist/wheel-raw
+          # hatchling produces py3-none-any because nothing here is compiled by
+          # Python's toolchain — but the wheel contains a platform-specific
+          # binary, so an `any` tag would let pip install the macOS wheel on
+          # Windows. Retagged to what it actually is.
+          python -m wheel tags --remove \
+            --platform-tag "${{ matrix.wheel_tag }}" \
+            dist/wheel-raw/*.whl
+          mkdir -p dist/wheels
+          mv dist/wheel-raw/*.whl dist/wheels/
+          ls -l dist/wheels
+
+      # A wheel that imports on the machine that built it is the minimum bar,
+      # and it catches the two things most likely to be wrong: the libraries
+      # not actually landing inside the package, and the ABI version check
+      # failing because binding and binary drifted apart.
+      - name: The wheel installs and imports
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/wheeltest
+          if [ -f /tmp/wheeltest/bin/python ]; then PY=/tmp/wheeltest/bin/python; else PY=/tmp/wheeltest/Scripts/python; fi
+          "$PY" -m pip install --quiet dist/wheels/*.whl
+          cd /tmp   # never import from the source tree, only from the wheel
+          "$PY" -c "import ctc_beam_decoder as d; dec = d.build_ctcdecoder(['a','b','']); print('  wheel imports, decoder constructs:', type(dec).__name__)"
+
+      # pyproject says requires-python >=3.9, and the wheel is tagged
+      # py3-none-<platform>, so pip will install it on any of them. Nothing
+      # verified that until here: every job above runs 3.13.
+      #
+      # This is the pyctcdecode mistake in miniature — a version bound asserted
+      # rather than measured — and this project exists because of what that cost
+      # downstream. The binding is pure ctypes with `from __future__ import
+      # annotations`, so there is good reason to believe 3.9 works. Good reason
+      # to believe is not the same as tested.
+      #
+      # One wheel serves every version, so testing it against several
+      # interpreters on one platform is enough; Linux is the cheapest.
+      - name: The wheel works on every Python version it claims
+        if: matrix.bundle == 'linux-x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          for v in 3.9 3.11 3.13 3.14; do
+            uv venv --python "$v" "/tmp/pyv-$v" --quiet 2>/dev/null || {
+              echo "  $v: interpreter unavailable, skipping"; continue; }
+            uv pip install --python "/tmp/pyv-$v" --quiet dist/wheels/*.whl
+            (cd /tmp && "/tmp/pyv-$v/bin/python" -c "import ctc_beam_decoder as d; d.build_ctcdecoder(['a','b','']); print('  $v OK')") \
+              || { echo "::error::the wheel claims >=3.9 but fails on $v"; exit 1; }
+          done
+
       - name: Archive
         shell: bash
         run: |
@@ -174,12 +252,17 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
             dist/*.sha256
+            dist/wheels/*.whl
 
   publish:
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # For PyPI Trusted Publishing: GitHub mints a short-lived OIDC token that
+      # PyPI verifies against the registered publisher. No API token exists, so
+      # there is nothing in repository secrets to leak or rotate.
+      id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -206,3 +289,26 @@ jobs:
             --title "${GITHUB_REF_NAME}" \
             --notes "Prebuilt decoder and KenLM libraries. Each bundle carries both: the decoder resolves KenLM beside itself." \
             dist/*.tar.gz dist/*.zip dist/*.sha256
+
+      # Last, and deliberately allowed to fail.
+      #
+      # By this point the archives, checksums and wheels are already attached to
+      # the GitHub release, which is what `classroom-captions` consumes — it
+      # pins bundles by checksum and never touches PyPI. So a misconfigured
+      # trusted publisher, a name clash or a PyPI outage must not fail a release
+      # that is otherwise complete and correct.
+      #
+      # If this step goes red, the release is still good: the wheels are on the
+      # release page and `pip install <url>` works. Fix the publisher and
+      # re-run this job.
+      - name: Publish wheels to PyPI
+        if: startsWith(github.ref, 'refs/tags/')
+        continue-on-error: true
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # dist/ also holds the .tar.gz, .zip and .sha256 bundle artifacts, and
+          # this action uploads everything it is pointed at. The upload step
+          # preserves the wheels under dist/wheels/, so point at that.
+          packages-dir: dist/wheels
+          skip-existing: true
+          verbose: true

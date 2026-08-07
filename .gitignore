@@ -7,3 +7,14 @@ __pycache__/
 # Fetched at a pinned commit by scripts/fetch-kenlm.sh, not vendored.
 third_party/
 dist/
+
+# Built libraries copied into the package directory when building a wheel.
+#
+# The wheel build stages them here on purpose — the binding looks for its
+# library in its own directory first — but they are build outputs and must
+# never be committed. Without this rule a `git add -A` after a local wheel
+# build puts a few hundred KB of binary in the repo, and the same class of
+# mistake already cost this project a several-hundred-megabyte history once.
+python/ctc_beam_decoder/*.so
+python/ctc_beam_decoder/*.dylib
+python/ctc_beam_decoder/*.dll
