@@ -95,13 +95,13 @@ def main() -> None:
     args = ap.parse_args()
 
     src = Path(args.logits).resolve()
-    meta = json.loads((src / "index.json").read_text())
+    meta = json.loads((src / "index.json").read_text(encoding="utf-8"))
     name = "pyctcdecode_reference_lm.json" if args.kenlm else "pyctcdecode_reference.json"
-    ref = json.loads((Path(args.reference).resolve() / name).read_text())
+    ref = json.loads((Path(args.reference).resolve() / name).read_text(encoding="utf-8"))
 
     unigrams = None
     if args.unigrams:
-        unigrams = [w.strip() for w in Path(args.unigrams).read_text().split() if w.strip()]
+        unigrams = [w.strip() for w in Path(args.unigrams).read_text(encoding="utf-8").split() if w.strip()]
     dec = BeamSearchDecoder(meta["vocab"], library=args.library,
                             kenlm_model_path=args.kenlm, unigrams=unigrams,
                             alpha=args.alpha, beta=args.beta)
