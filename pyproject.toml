@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ctc-beam-decoder"
+version = "0.2.0"
+description = "A C++ CTC prefix beam search with KenLM fusion and hotword biasing, reproducing pyctcdecode's behaviour"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Happy Prime Inc" }]
+keywords = ["ctc", "beam-search", "asr", "speech-recognition", "kenlm", "decoder"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: C++",
+  "Topic :: Multimedia :: Sound/Audio :: Speech",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = ["numpy"]
+
+[project.urls]
+Homepage = "https://github.com/happy-prime-inc/ctc-beam-decoder"
+Issues = "https://github.com/happy-prime-inc/ctc-beam-decoder/issues"
+
+# numpy is deliberately unpinned.
+#
+# This project exists because pyctcdecode pinned `numpy<2.0.0` on a guess, that
+# pin outlived any reason for it, and it eventually made a downstream app
+# unbuildable on Windows — numpy 1.26.4 has no cp313 Windows wheel, so pip built
+# it from source and produced a numpy that failed its own floating-point checks.
+#
+# Decoding here was measured byte-identical under numpy 1.26.4 and 2.5.1 across
+# 131 fixtures. Adding a cap we cannot justify would repeat exactly the mistake
+# this library was written to escape.
+
+[tool.hatch.build.targets.wheel]
+packages = ["python/ctc_beam_decoder"]
+# The shared libraries are built by CMake and copied into the package directory
+# before the wheel is built (see .github/workflows/release.yml). The binding's
+# search order already looks in its own directory first — `here / name` — and
+# is commented as the installed-package case, so nothing in the code changes.
+artifacts = ["*.so", "*.dylib", "*.dll"]
+
+[tool.hatch.build.targets.sdist]
+# There is deliberately no useful sdist.
+#
+# An sdist would have to build from source, and a from-source dependency chain
+# breaking a platform is the entire reason this library exists. Shipping one
+# would hand the same failure mode to anyone without a working toolchain, and
+# they would hit it at `pip install` time with a wall of compiler output.
+#
+# Wheels only. `pip install` either finds a wheel for the platform or fails
+# clearly, which is the honest outcome.
+exclude = ["*"]

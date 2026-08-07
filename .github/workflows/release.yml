@@ -43,7 +43,21 @@ jobs:
             bundle: macos-arm64
             ext: tar.gz
             libs: libctc_beam_decoder.dylib libkenlm.dylib
-          - os: ubuntu-latest
+          # ubuntu-22.04 rather than ubuntu-latest, deliberately.
+          #
+          # v0.1.0 was built on ubuntu-latest — 24.04 — and would not load on
+          # 22.04 at all: "libstdc++.so.6: version `GLIBCXX_3.4.32' not found".
+          # 22.04 is an LTS supported until 2027, and Debian 12 and RHEL 9 sit
+          # in the same bracket.
+          #
+          # Static libstdc++ (see CMakeLists.txt) handles the C++ runtime, but
+          # glibc itself cannot be statically linked sanely, and its symbol
+          # versions are decided by the build machine. So the rule for a
+          # distributable is to build against the OLDEST libc you intend to
+          # support, not the newest available. `ubuntu-latest` is a moving
+          # target that silently raises the floor whenever GitHub rolls it
+          # forward — which is exactly how this happened.
+          - os: ubuntu-22.04
             bundle: linux-x64
             ext: tar.gz
             libs: libctc_beam_decoder.so libkenlm.so

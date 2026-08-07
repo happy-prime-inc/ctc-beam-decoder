@@ -75,6 +75,33 @@ else()
   set_target_properties(ctc_beam_decoder PROPERTIES PREFIX "lib")
 endif()
 
+# Carry our own C++ runtime on Linux.
+#
+# Without this, the .so records a dependency on whatever libstdc++ the build
+# machine had. The v0.1.0 Linux release was built on ubuntu-latest — Ubuntu
+# 24.04, GCC 13/14 — and therefore demands GLIBCXX_3.4.32, which Ubuntu 22.04
+# LTS does not have. It failed to load there with:
+#
+#   libstdc++.so.6: version `GLIBCXX_3.4.32' not found
+#     (required by libctc_beam_decoder.so)
+#
+# 22.04 is supported until 2027, and Debian 12 and RHEL 9 sit in the same
+# bracket, so that is a large share of the Linux machines anyone would actually
+# run this on. This project's own CI could never have caught it: it builds and
+# tests on the same new toolchain, so it is self-consistent and broken for
+# everybody else. It took building a downstream app on an older runner.
+#
+# Linking the C++ runtime statically makes the library indifferent to what the
+# distro ships. It also makes the manylinux wheel tags honest — those tags are
+# a promise about exactly this, and a wheel built the old way would have been
+# claiming compatibility the binary did not have.
+#
+# Not needed on macOS (libc++ is part of the OS and stable) or Windows (the
+# MSVC runtime is handled separately).
+if(UNIX AND NOT APPLE)
+  target_link_options(ctc_beam_decoder PRIVATE -static-libstdc++ -static-libgcc)
+endif()
+
 # Look for KenLM next to ourselves once installed.
 #
 # CMake strips the build-tree rpath on install, so without this the installed
