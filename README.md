@@ -116,18 +116,27 @@ on equal settings — `decode()` turns history pruning on, since only the top
 beam is wanted there — so a decoder can reproduce every beam and still return a
 different transcript. This one did, once.
 
-### That third column
+### What "allowing for token order" means
 
-pyctcdecode collects each frame's candidate tokens in a Python set and iterates
-it, so the arbitrary-but-fixed order of a CPython hash table decides how
-near-ties break. Re-running pyctcdecode against *itself* with tokens visited in
-ascending order instead, **9 of these 72 fixtures decode differently, and 8 of
-the 9 differ in the top-1 transcript.** For those there is no single right
-answer to match: both outputs are pyctcdecode. The third column counts a
-fixture as matching if it agrees with either.
+pyctcdecode gives slightly different answers depending on something it never
+meant to depend on.
 
-Reproducing the first column exactly would mean reimplementing CPython's set
-internals and staying pinned to them.
+At each frame it gathers the candidate tokens into a Python set and loops over
+them. A set has no order you can rely on. Python picks one, it stays the same
+for the same input, and it is otherwise arbitrary. When two candidate
+transcripts score almost exactly the same, that arbitrary order is what decides
+which of them wins.
+
+You can watch it happen. Run pyctcdecode twice on the same audio, changing
+nothing except the order it walks those tokens: **9 of the 72 fixtures come out
+differently, and on 8 of those the final transcript changes.**
+
+So on those 9 there is no single answer to match — both results are
+pyctcdecode's own. The first two columns require matching the run recorded
+here. The last column accepts either.
+
+Matching the first two everywhere would mean copying how a particular version
+of Python happens to order a set, and staying tied to it.
 
 Scores are compared to within 1e-4 rather than bit for bit. Floating-point
 accumulation order differs between numpy and C++, and matching it exactly is a
