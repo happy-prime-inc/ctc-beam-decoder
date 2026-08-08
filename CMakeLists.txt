@@ -75,6 +75,26 @@ else()
   set_target_properties(ctc_beam_decoder PROPERTIES PREFIX "lib")
 endif()
 
+# Tried and rejected: -static-libstdc++ on Linux.
+#
+# The v0.1.0 Linux release would not load on Ubuntu 22.04 —
+# "libstdc++.so.6: version `GLIBCXX_3.4.32' not found" — because it was built on
+# ubuntu-latest, now 24.04. Linking the C++ runtime statically looked like the
+# obvious belt-and-braces fix alongside pinning the build to 22.04.
+#
+# It segfaults. This library is loaded into processes that already contain other
+# C++ extensions — pyctcdecode's kenlm module in this project's own parity job,
+# and libparakeet (C++ with ggml) in classroom-captions — and a statically
+# linked C++ runtime alongside the system one means two copies of that runtime's
+# global state in one process. The parity job died with exit 139 and a core
+# dump; the same thing would have happened in the shipped Linux app, where the
+# decoder and libparakeet sit in the same interpreter.
+#
+# Building on the oldest supported distro is sufficient on its own and has no
+# such hazard. See .github/workflows/release.yml, where the Linux job is pinned
+# to ubuntu-22.04. Do not reintroduce this without a way to test the
+# loaded-alongside-another-C++-extension case.
+
 # Look for KenLM next to ourselves once installed.
 #
 # CMake strips the build-tree rpath on install, so without this the installed

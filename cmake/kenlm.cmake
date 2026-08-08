@@ -69,4 +69,6 @@ target_link_libraries(kenlm PRIVATE ${CTCBD_ZLIB_TARGET})
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_link_libraries(kenlm PRIVATE rt)
+  # No -static-libstdc++ here either; see the note in the top-level
+  # CMakeLists.txt for why it was tried and reverted.
 endif()
