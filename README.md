@@ -64,10 +64,14 @@ wheel on 3.9, 3.11, 3.13 and 3.14 rather than assuming it. A version bound
 asserted instead of measured is what made this project necessary; it would be a
 poor joke to repeat it here.
 
-**Linux compatibility.** The Linux wheel is built on Ubuntu 22.04 and links the
-C++ runtime statically, so it runs on glibc 2.35 and later — 22.04, Debian 12,
-RHEL 9 and newer. v0.1.0 was built on a newer toolchain and would not load on
-any of those.
+**Linux compatibility.** The Linux wheel is built on Ubuntu 22.04, so it needs
+glibc 2.35 or later — 22.04, Debian 12, RHEL 9 and anything newer. v0.1.0 was
+built on a newer toolchain and would not load on any of those
+(`GLIBCXX_3.4.32' not found`).
+
+Portability comes from building against an old enough toolchain, not from static
+linking. `-static-libstdc++` was tried and reverted: it segfaults when the
+library is loaded beside another C++ extension, which is the normal case here.
 
 ### From a release
 

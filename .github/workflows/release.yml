@@ -51,13 +51,16 @@ jobs:
           # 22.04 is an LTS supported until 2027, and Debian 12 and RHEL 9 sit
           # in the same bracket.
           #
-          # Static libstdc++ (see CMakeLists.txt) handles the C++ runtime, but
-          # glibc itself cannot be statically linked sanely, and its symbol
-          # versions are decided by the build machine. So the rule for a
-          # distributable is to build against the OLDEST libc you intend to
-          # support, not the newest available. `ubuntu-latest` is a moving
-          # target that silently raises the floor whenever GitHub rolls it
-          # forward — which is exactly how this happened.
+          # This pin is the whole fix. -static-libstdc++ was tried alongside it
+          # and reverted — it segfaults when the library is loaded beside
+          # another C++ extension, which is the normal case (see CMakeLists.txt).
+          #
+          # So portability rests entirely on the toolchain: glibc cannot be
+          # statically linked sanely and its symbol versions come from the build
+          # machine, meaning a distributable must build against the OLDEST libc
+          # it intends to support. `ubuntu-latest` is a moving target that
+          # silently raises that floor whenever GitHub rolls it forward — which
+          # is exactly how this happened.
           - os: ubuntu-22.04
             bundle: linux-x64
             ext: tar.gz
@@ -196,7 +199,15 @@ jobs:
         run: |
           set -euo pipefail
           python -m venv /tmp/wheeltest
-          if [ -f /tmp/wheeltest/bin/python ]; then PY=/tmp/wheeltest/bin/python; else PY=/tmp/wheeltest/Scripts/python; fi
+          # POSIX puts it at bin/python; Windows at Scripts/python.exe. Under
+          # Git Bash the bare `Scripts/python` path does not exist, so name the
+          # .exe explicitly rather than relying on PATHEXT resolution.
+          if [ -f /tmp/wheeltest/bin/python ]; then
+            PY=/tmp/wheeltest/bin/python
+          else
+            PY=/tmp/wheeltest/Scripts/python.exe
+          fi
+          test -x "$PY" || { echo "::error::no interpreter at $PY"; ls -R /tmp/wheeltest | head -20; exit 1; }
           "$PY" -m pip install --quiet dist/wheels/*.whl
           cd /tmp   # never import from the source tree, only from the wheel
           "$PY" -c "import ctc_beam_decoder as d; dec = d.build_ctcdecoder(['a','b','']); print('  wheel imports, decoder constructs:', type(dec).__name__)"
@@ -218,8 +229,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          export PATH="$HOME/.local/bin:$PATH"
           for v in 3.9 3.11 3.13 3.14; do
             uv venv --python "$v" "/tmp/pyv-$v" --quiet 2>/dev/null || {
               echo "  $v: interpreter unavailable, skipping"; continue; }
@@ -277,18 +286,48 @@ jobs:
           echo
           cat dist/*.sha256
 
+      # Notes come from CHANGELOG.md, not from a string in this file.
+      #
+      # v0.1.0 shipped with a single hardcoded sentence, which is what a --notes
+      # literal encourages: nobody edits the workflow to describe a release. A
+      # section per tag in the changelog is reviewable in the PR that makes the
+      # change, alongside the change itself.
+      #
+      # A tag with no section fails here rather than publishing empty notes. For
+      # a release that fixes a bug making the previous one unusable on a whole
+      # platform, notes are not decoration.
+      - name: Release notes from the changelog
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          python - "$GITHUB_REF_NAME" <<'PY' > release-notes.md
+          import pathlib, re, sys
+          tag = sys.argv[1]
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          m = re.search(rf"^## {re.escape(tag)}\s*$(.*?)(?=^## |\Z)", text, re.S | re.M)
+          if not m or not m.group(1).strip():
+              sys.exit(f"CHANGELOG.md has no section for {tag}; add one before tagging")
+          print(m.group(1).strip())
+          PY
+          echo "--- release notes ---"
+          cat release-notes.md
+
       - name: Attach to the release
         # Only for a tag. A workflow_dispatch run builds and checksums so the
         # thing can be rehearsed, and publishes nothing.
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
+        # Wheels are attached here as well as pushed to PyPI. The PyPI step is
+        # continue-on-error, so if it were the only route the wheels would exist
+        # nowhere durable when it failed — and `pip install <release-url>` is a
+        # reasonable fallback that only works if they are on the release.
         run: |
           gh release create "${GITHUB_REF_NAME}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
-            --notes "Prebuilt decoder and KenLM libraries. Each bundle carries both: the decoder resolves KenLM beside itself." \
-            dist/*.tar.gz dist/*.zip dist/*.sha256
+            --notes-file release-notes.md \
+            dist/*.tar.gz dist/*.zip dist/*.sha256 dist/wheels/*.whl
 
       # Last, and deliberately allowed to fail.
       #
