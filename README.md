@@ -64,9 +64,15 @@ wheel on 3.9, 3.11, 3.13 and 3.14 rather than assuming it. A version bound
 asserted instead of measured is what made this project necessary; it would be a
 poor joke to repeat it here.
 
-**Linux compatibility.** The Linux wheel is built on Ubuntu 22.04, so it needs
-glibc 2.35 or later — 22.04, Debian 12, RHEL 9 and anything newer. v0.1.0 was
-built on a newer toolchain and would not load on any of those
+**Linux compatibility.** The Linux wheel is built on Ubuntu 22.04 and tagged
+`manylinux_2_35_x86_64`, so it needs **glibc 2.35 or later** — Ubuntu 22.04,
+Debian 12 (2.36), and anything newer.
+
+**RHEL 9 is not covered**: it ships glibc 2.34, and pip will correctly refuse
+the wheel there. Supporting it would mean building in a manylinux_2_34
+environment and verifying with `auditwheel show`, rather than asserting it here.
+
+v0.1.0 was built on a newer toolchain still and would not load on any of these
 (`GLIBCXX_3.4.32' not found`).
 
 Portability comes from building against an old enough toolchain, not from static

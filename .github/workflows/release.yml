@@ -236,9 +236,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # No skipping. The README says these versions are tested, not
+          # assumed, so an interpreter that cannot be obtained has to fail the
+          # job — otherwise a transient download failure, or a removed
+          # interpreter build, turns the advertised compatibility check into a
+          # green tick that verified nothing. `uv` provisions these itself, so
+          # a failure here is a real problem rather than a runner quirk.
           for v in 3.9 3.11 3.13 3.14; do
-            uv venv --python "$v" "/tmp/pyv-$v" --quiet 2>/dev/null || {
-              echo "  $v: interpreter unavailable, skipping"; continue; }
+            uv venv --python "$v" "/tmp/pyv-$v" --quiet \
+              || { echo "::error::could not obtain Python $v; the wheel claims to support it, so this check cannot be skipped"; exit 1; }
             uv pip install --python "/tmp/pyv-$v" --quiet dist/wheels/*.whl
             (cd /tmp && "/tmp/pyv-$v/bin/python" -c "import ctc_beam_decoder as d; d.build_ctcdecoder(['a','b','']); print('  $v OK')") \
               || { echo "::error::the wheel claims >=3.9 but fails on $v"; exit 1; }

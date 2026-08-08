@@ -7,7 +7,7 @@ here fails the release rather than publishing an empty one.
 ## v0.2.0
 
 **The Linux binary in v0.1.0 does not load on Ubuntu 22.04.** If you are on
-22.04, Debian 12, RHEL 9 or anything of that vintage, v0.1.0 fails with:
+22.04, Debian 12 or anything of that vintage, v0.1.0 fails with:
 
 ```
 libstdc++.so.6: version `GLIBCXX_3.4.32' not found
@@ -15,8 +15,13 @@ libstdc++.so.6: version `GLIBCXX_3.4.32' not found
 ```
 
 It was built on `ubuntu-latest`, which is now 24.04. This release builds the
-Linux artifacts on Ubuntu 22.04, so they need glibc 2.35 or later and run on
-everything newer.
+Linux artifacts on Ubuntu 22.04, so they need **glibc 2.35 or later** — Ubuntu
+22.04, Debian 12 (2.36) and anything newer.
+
+RHEL 9 is **not** covered: it ships glibc 2.34, below the `manylinux_2_35` tag
+these wheels carry, and pip will correctly refuse them there. Supporting it
+would mean building in a manylinux_2_34 environment and verifying with
+`auditwheel show`.
 
 Nothing else about the binaries changed — no decoding behaviour is affected, and
 the parity guarantee against pyctcdecode is unchanged. macOS and Windows users
