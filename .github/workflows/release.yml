@@ -82,6 +82,13 @@ jobs:
         with:
           python-version: "3.13"
 
+      # For the multi-version wheel check below, which needs interpreters this
+      # runner does not have. The pinned action rather than `curl | sh`: this
+      # workflow publishes signed artifacts and pushes to PyPI, so executing a
+      # script fetched at run time is a supply-chain risk it should not carry,
+      # and a release should not fail because an installer endpoint is down.
+      - uses: astral-sh/setup-uv@v5
+
       - name: Fetch KenLM sources
         shell: bash
         run: ./scripts/fetch-kenlm.sh
@@ -273,6 +280,10 @@ jobs:
       # there is nothing in repository secrets to leak or rotate.
       id-token: write
     steps:
+      # This job builds nothing, but it reads CHANGELOG.md for the release
+      # notes, so it needs the repository as well as the artifacts.
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
