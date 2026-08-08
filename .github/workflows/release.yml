@@ -48,8 +48,11 @@ jobs:
           #
           # v0.1.0 was built on ubuntu-latest — 24.04 — and would not load on
           # 22.04 at all: "libstdc++.so.6: version `GLIBCXX_3.4.32' not found".
-          # 22.04 is an LTS supported until 2027, and Debian 12 and RHEL 9 sit
-          # in the same bracket.
+          # 22.04 is an LTS supported until 2027, and it sets the floor these
+          # artifacts carry: glibc 2.35, so Debian 12 (2.36) and newer are
+          # covered. RHEL 9 is not — it ships glibc 2.34, below the
+          # manylinux_2_35 tag on the wheels, and supporting it would mean
+          # building in a manylinux_2_34 environment rather than saying so here.
           #
           # This pin is the whole fix. -static-libstdc++ was tried alongside it
           # and reverted — it segfaults when the library is loaded beside
